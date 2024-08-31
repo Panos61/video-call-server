@@ -84,18 +84,18 @@ func InvitationKeyReverseIndex(invitationKey, roomID string) error {
 	return nil
 }
 
-func AuthorizeInvitationKey(keyInput string) (bool, error) {
+func AuthorizeInvitationKey(keyInput string) (bool, string, error) {
 	// Checks for any existing room using the invKey reverse index mapped to roomID
-	err := rdb.Get(ctx, "invitationKey:"+keyInput).Err()
+	roomID, err := rdb.Get(ctx, "invitationKey:"+keyInput).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return false, err
+			return false, "", err
 		} else {
-			return false, err
+			return false, "", err
 		}
 	}
 
-	return true, nil
+	return true, roomID, nil
 }
 
 func (r *Room) AddParticipant(p *Participant) {

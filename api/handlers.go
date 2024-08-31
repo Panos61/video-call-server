@@ -130,14 +130,14 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
-	var requestBody struct {
-		KeyInput string `json:"keyInput"`
-	}
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
+	}
+
+	var requestBody struct {
+		KeyInput string `json:"keyInput"`
 	}
 
 	err = json.Unmarshal(body, &requestBody)
@@ -146,17 +146,23 @@ func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAuthorized, err := room.AuthorizeInvitationKey(requestBody.KeyInput)
+	isAuthorized, roomID, err := room.AuthorizeInvitationKey(requestBody.KeyInput)
 	if err != nil {
 		// should specify the error here
 		// could be internal error
 		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]bool{"isAuthorized": isAuthorized})
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"isAuthorized": isAuthorized,
+			"roomID":       "",
+		})
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]bool{"isAuthorized": isAuthorized})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"isAuthorized": isAuthorized,
+		"roomID":       roomID,
+	})
 }
 
 func signallingHandler(w http.ResponseWriter, r *http.Request) {
