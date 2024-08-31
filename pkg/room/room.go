@@ -8,7 +8,9 @@ import (
 	"server/redisclient"
 	"strconv"
 	"sync"
+	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v3"
@@ -40,7 +42,7 @@ func GenerateRoomID() string {
 	return fmt.Sprintf("%d", rand.Int63())
 }
 
-func CreateRoom() *Room {
+func CreateRoom() (*Room, error) {
 	roomID := uuid.New().String()
 
 	newRoom := &Room{
@@ -50,10 +52,10 @@ func CreateRoom() *Room {
 
 	err := rdb.HSet(ctx, roomID, map[string]interface{}{"id": roomID}).Err()
 	if err != nil {
-		log.Printf("Error saving room: %s\n", err)
+		return nil, fmt.Errorf("error saving room: %w", err)
 	}
 
-	return newRoom
+	return newRoom, nil
 }
 
 func GetRoom(id string) *Room {
@@ -68,6 +70,32 @@ func GetRoom(id string) *Room {
 	}
 
 	return room
+}
+
+func InvitationKeyReverseIndex(invitationKey, roomID string) error {
+	// Creates a reverse index mapping invitationKey to roomID
+	expires := 1 * time.Minute
+
+	err := rdb.Set(ctx, "invitationKey:"+invitationKey, roomID, expires).Err()
+	if err != nil {
+		return fmt.Errorf("failed to create invkey reverse index %w", err)
+	}
+
+	return nil
+}
+
+func AuthorizeInvitationKey(keyInput string) (bool, error) {
+	// Checks for any existing room using the invKey reverse index mapped to roomID
+	err := rdb.Get(ctx, "invitationKey:"+keyInput).Err()
+	if err != nil {
+		if err == redis.Nil {
+			return false, err
+		} else {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
 
 func (r *Room) AddParticipant(p *Participant) {

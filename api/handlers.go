@@ -15,7 +15,10 @@ import (
 )
 
 func createRoomHandler(w http.ResponseWriter, r *http.Request) {
-	newRoom := room.CreateRoom()
+	newRoom, err := room.CreateRoom()
+	if err != nil {
+		http.Error(w, "Failed to create room", 500)
+	}
 
 	host := room.Participant{
 		ID:     rand.Int63(),
@@ -29,6 +32,7 @@ func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 		"participants": newRoom.Participants,
 	}
 
+	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -107,7 +111,7 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for {
 			invKey := room.GenerateInvKey(existingRoom.ID)
-			time.Sleep(10 * time.Second)
+			time.Sleep(60 * time.Second)
 			keyChan <- invKey
 		}
 	}()
@@ -117,19 +121,40 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for invKey := range keyChan {
 			client.SetRoomKey(existingRoom.ID, invKey)
+			err = room.InvitationKeyReverseIndex(invKey, existingRoom.ID)
+			if err != nil {
+				return
+			}
 		}
 	}()
 }
 
-func grantRoomAccessHandler(w http.ResponseWriter, r *http.Request) {
+func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
+	var requestBody struct {
+		KeyInput string `json:"keyInput"`
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	err = json.Unmarshal(body, nil)
-	fmt.Println(err)
+	err = json.Unmarshal(body, &requestBody)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	isAuthorized, err := room.AuthorizeInvitationKey(requestBody.KeyInput)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]bool{"isAuthorized": isAuthorized})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]bool{"isAuthorized": isAuthorized})
 }
 
 func signallingHandler(w http.ResponseWriter, r *http.Request) {
