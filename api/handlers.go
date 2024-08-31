@@ -148,6 +148,8 @@ func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
 
 	isAuthorized, err := room.AuthorizeInvitationKey(requestBody.KeyInput)
 	if err != nil {
+		// should specify the error here
+		// could be internal error
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]bool{"isAuthorized": isAuthorized})
 		return
