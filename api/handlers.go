@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
-	"math/rand"
 	"net/http"
+	"server/pkg/jwtutils"
 	"server/pkg/peerconnection"
 	"server/pkg/room"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v3"
@@ -20,17 +20,25 @@ func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to create room", 500)
 	}
 
-	host := room.Participant{
-		ID:     rand.Int63(),
-		IsHost: true,
+	hostParticipant, err := room.SetHostParticipant(newRoom.ID)
+	if err != nil {
+		http.Error(w, "Failed to set host participant", 500)
+		return
 	}
 
-	newRoom.AddParticipant(&host)
+	jwtToken, err := jwtutils.GenerateJWT(hostParticipant.ID, true)
+	if err != nil {
+		http.Error(w, "Failed to generate jwt", 500)
+		return
+	}
 
 	response := map[string]interface{}{
 		"id":           newRoom.ID,
-		"participants": newRoom.Participants,
+		"participants": *hostParticipant,
+		"token":        jwtToken,
 	}
+
+	fmt.Printf("Create-room resp: %v\n", response)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -43,7 +51,11 @@ func joinRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existingRoom := room.GetRoom(id)
+	existingRoom, err := room.GetRoom(id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -59,40 +71,48 @@ func joinRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If is host, set only participant's name
-	for _, p := range existingRoom.Participants {
-		if p.IsHost {
-			p.Name = participant.Name
-			participant = *p
-			break
+	var claims *jwtutils.Claims
+	var participantID string
+	var isHost bool
+
+	tokenStr := r.Header.Get("Authorization")
+	tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
+
+	if tokenStr != "" && tokenStr != "null" {
+		claims, err = jwtutils.ValidateToken(tokenStr)
+		if err != nil {
+			http.Error(w, "error validating token", 500)
 		}
+
+		participantID = claims.ParticipantID
+		isHost = claims.IsHost
+	} else {
+		isHost = false
 	}
 
-	// If not host, add participant to the room
-	if !participant.IsHost {
-		participant.ID = rand.Int63()
-		existingRoom.AddParticipant(&participant)
+	_, err = room.JoinRoom(existingRoom.ID, participantID, tokenStr, participant.Name, isHost)
+	if err != nil {
+		http.Error(w, "error joining room", 500)
+		return
 	}
 
 	response := struct {
 		RoomID       string                       `json:"room_id"`
 		Participants map[string]*room.Participant `json:"participants"`
-		// PeerConnections map[string]*webrtc.PeerConnection `json:"peer_connections"`
 	}{
 		RoomID:       existingRoom.ID,
 		Participants: existingRoom.Participants,
-		// PeerConnections: existingRoom.PeerConnections,
 	}
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding response: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to encode response"})
 	}
 }
 
 func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
+	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		http.Error(w, "Error upgrading to WS.", http.StatusInternalServerError)
@@ -100,8 +120,8 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 
 	roomID := r.PathValue("id")
 
-	existingRoom := room.GetRoom(roomID)
-	if existingRoom == nil {
+	existingRoom, err := room.GetRoom(roomID)
+	if existingRoom == nil || err != nil {
 		http.Error(w, "No room existing with this id.", http.StatusBadRequest)
 		return
 	}
@@ -111,7 +131,7 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for {
 			invKey := room.GenerateInvKey(existingRoom.ID)
-			time.Sleep(60 * time.Second)
+			time.Sleep(20 * time.Second)
 			keyChan <- invKey
 		}
 	}()
@@ -172,7 +192,10 @@ func signallingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existingRoom := room.GetRoom(id)
+	existingRoom, err := room.GetRoom(id)
+	if err != nil {
+		return
+	}
 
 	peerconnection, err := peerconnection.InitPeerConnection(w, r, existingRoom)
 	if peerconnection == nil {
@@ -183,16 +206,16 @@ func signallingHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 
-	existingRoom.PeerConnections[room.GenerateRoomID()] = peerconnection
+	// existingRoom.PeerConnections[room.GenerateRoomID()] = peerconnection
 
 	response := struct {
 		RoomID          string                            `json:"id"`
 		Participants    map[string]*room.Participant      `json:"participants"`
 		PeerConnections map[string]*webrtc.PeerConnection `json:"peer_connections"`
 	}{
-		RoomID:          existingRoom.ID,
-		Participants:    existingRoom.Participants,
-		PeerConnections: existingRoom.PeerConnections,
+		RoomID:       existingRoom.ID,
+		Participants: existingRoom.Participants,
+		// PeerConnections: existingRoom.PeerConnections,
 	}
 
 	w.WriteHeader(http.StatusOK)

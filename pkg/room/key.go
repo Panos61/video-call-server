@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"time"
+
+	"github.com/go-redis/redis"
 )
 
 func GenerateInvKey(roomID string) string {
@@ -22,19 +24,17 @@ func GenerateInvKey(roomID string) string {
 }
 
 func (c *WSClient) SetRoomKey(roomID string, invKey string) {
-	expirationTime := 10 * time.Second
+	expirationTime := 20 * time.Second
 
-	data, err := rdb.HMSet(ctx, roomID, map[string]interface{}{
+	err := rdb.HSet(ctx, "room:"+roomID, map[string]interface{}{
 		"invitation_key": invKey,
 		"expiresIn":      time.Now().Add(expirationTime).Format(time.RFC3339),
-	}).Result()
+	}).Err()
 
 	if err != nil {
 		log.Printf("Error setting room invitation key %s\n", err)
 		return
 	}
-
-	fmt.Printf("data: %#v\n", data)
 
 	if invKey != "" {
 		err := c.Conn.WriteJSON(invKey)
@@ -54,4 +54,30 @@ func GetCurrentKey(roomID string) (string, error) {
 	}
 
 	return key, nil
+}
+
+func InvitationKeyReverseIndex(invitationKey, roomID string) error {
+	// Creates a reverse index mapping invitationKey to roomID
+	expires := 20 * time.Second
+
+	err := rdb.Set(ctx, "invitationKey:"+invitationKey, roomID, expires).Err()
+	if err != nil {
+		return fmt.Errorf("failed to create invkey reverse index %w", err)
+	}
+
+	return nil
+}
+
+func AuthorizeInvitationKey(keyInput string) (bool, string, error) {
+	// Checks for any existing room using the invKey reverse index mapped to roomID
+	roomID, err := rdb.Get(ctx, "invitationKey:"+keyInput).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return false, "", err
+		} else {
+			return false, "", err
+		}
+	}
+
+	return true, roomID, nil
 }
