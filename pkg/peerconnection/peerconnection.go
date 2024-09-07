@@ -43,41 +43,41 @@ func InitPeerConnection(w http.ResponseWriter, r *http.Request, rm *room.Room) (
 		}
 	})
 
-	peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		for _, p := range rm.PeerConnections {
-			if p != peerConnection {
-				newTrack, err := webrtc.NewTrackLocalStaticRTP(tr.Codec().RTPCodecCapability, tr.ID(), tr.StreamID())
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
+	// peerConnection.OnTrack(func(tr *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
+	// 	for _, p := range rm.PeerConnections {
+	// 		if p != peerConnection {
+	// 			newTrack, err := webrtc.NewTrackLocalStaticRTP(tr.Codec().RTPCodecCapability, tr.ID(), tr.StreamID())
+	// 			if err != nil {
+	// 				fmt.Println(err)
+	// 				continue
+	// 			}
 
-				_, err = p.AddTrack(newTrack)
-				fmt.Printf("new track %v", newTrack)
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
+	// 			_, err = p.AddTrack(newTrack)
+	// 			fmt.Printf("new track %v", newTrack)
+	// 			if err != nil {
+	// 				fmt.Println(err)
+	// 				continue
+	// 			}
 
-				// go func() {
-				// 	buf := make([]byte, 1500)
-				// 	for {
-				// 		i, _, readErr := tr.Read(buf)
-				// 		if readErr != nil {
-				// 			log.Println(readErr)
-				// 			return
-				// 		}
+	// 			// go func() {
+	// 			// 	buf := make([]byte, 1500)
+	// 			// 	for {
+	// 			// 		i, _, readErr := tr.Read(buf)
+	// 			// 		if readErr != nil {
+	// 			// 			log.Println(readErr)
+	// 			// 			return
+	// 			// 		}
 
-				// 		writeErr := newTrack.WriteRTP(buf[:i])
-				// 		if writeErr != nil {
-				// 			log.Println(writeErr)
-				// 			return
-				// 		}
-				// 	}
-				// }()
-			}
-		}
-	})
+	// 			// 		writeErr := newTrack.WriteRTP(buf[:i])
+	// 			// 		if writeErr != nil {
+	// 			// 			log.Println(writeErr)
+	// 			// 			return
+	// 			// 		}
+	// 			// 	}
+	// 			// }()
+	// 		}
+	// 	}
+	// })
 
 	// Read the SDP offer from the request body
 	var offer webrtc.SessionDescription
