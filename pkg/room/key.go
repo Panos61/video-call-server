@@ -23,8 +23,8 @@ func GenerateInvKey(roomID string) string {
 	return invitationKey
 }
 
-func (c *WSClient) SetRoomKey(roomID string, invKey string) {
-	expirationTime := 20 * time.Second
+func SetRoomKey(roomID string, invKey string) error {
+	expirationTime := 60 * time.Second
 
 	err := rdb.HSet(ctx, "room:"+roomID, map[string]interface{}{
 		"invitation_key": invKey,
@@ -33,17 +33,24 @@ func (c *WSClient) SetRoomKey(roomID string, invKey string) {
 
 	if err != nil {
 		log.Printf("Error setting room invitation key %s\n", err)
-		return
+		return err
 	}
 
-	if invKey != "" {
-		err := c.Conn.WriteJSON(invKey)
-		if err != nil {
-			fmt.Printf("Error writing JSON: %s\n", err)
-			c.Conn.Close()
-			return
-		}
+	return nil
+}
+
+func IsKeyExpired(roomID string) (bool, error) {
+	expiresIn, err := rdb.HGet(ctx, "room:"+roomID, "expiresIn").Result()
+	if err == redis.Nil {
+		return true, nil
 	}
+
+	expirationTime, err := time.Parse(time.RFC3339, expiresIn)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse expiry time: %v", err)
+	}
+
+	return time.Now().After(expirationTime), nil
 }
 
 func GetCurrentKey(roomID string) (string, error) {
@@ -58,7 +65,7 @@ func GetCurrentKey(roomID string) (string, error) {
 
 func InvitationKeyReverseIndex(invitationKey, roomID string) error {
 	// Creates a reverse index mapping invitationKey to roomID
-	expires := 20 * time.Second
+	expires := 60 * time.Second
 
 	err := rdb.Set(ctx, "invitationKey:"+invitationKey, roomID, expires).Err()
 	if err != nil {

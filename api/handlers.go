@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"server/pkg/jwtutils"
 	"server/pkg/peerconnection"
@@ -111,13 +112,7 @@ func joinRoomHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
-	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		http.Error(w, "Error upgrading to WS.", http.StatusInternalServerError)
-	}
-
+func setInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 	roomID := r.PathValue("id")
 
 	existingRoom, err := room.GetRoom(roomID)
@@ -126,27 +121,79 @@ func updateInvKeyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keyChan := make(chan string)
+	invKey := room.GenerateInvKey(existingRoom.ID)
+	err = room.SetRoomKey(existingRoom.ID, invKey)
+	if err != nil {
+		http.Error(w, "failed to set invKey to this room", 500)
+		return
+	}
 
-	go func() {
-		for {
-			invKey := room.GenerateInvKey(existingRoom.ID)
-			time.Sleep(20 * time.Second)
-			keyChan <- invKey
-		}
-	}()
+	err = room.InvitationKeyReverseIndex(invKey, existingRoom.ID)
+	if err != nil {
+		http.Error(w, "Failed to create reverse index for new invitation key.", http.StatusInternalServerError)
+		return
+	}
 
-	client := room.WSClient{Conn: conn}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"invitation_key": invKey,
+	})
+}
 
-	go func() {
-		for invKey := range keyChan {
-			client.SetRoomKey(existingRoom.ID, invKey)
-			err = room.InvitationKeyReverseIndex(invKey, existingRoom.ID)
+// Server-sent event handler to check for expired invitation key
+func sseKeyUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	roomID := r.PathValue("id")
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	// Listen for client disconnect
+	notify := r.Context().Done()
+
+	for {
+		select {
+		case <-notify:
+			log.Printf("Client disconnected from room: %s", roomID)
+			return
+
+		default:
+			isExpired, err := room.IsKeyExpired(roomID)
 			if err != nil {
+				fmt.Fprintf(w, "event: error\ndata: %v\n\n", err)
+				flusher.Flush()
 				return
 			}
+
+			if isExpired {
+				newKey := room.GenerateInvKey(roomID)
+				err := room.SetRoomKey(roomID, newKey)
+				if err != nil {
+					fmt.Fprintf(w, "event: error\ndata: %v\n\n", err)
+					flusher.Flush()
+					return
+				}
+
+				fmt.Fprintf(w, "event: update\ndata: %s\n\n", newKey)
+				flusher.Flush()
+
+				err = room.InvitationKeyReverseIndex(newKey, roomID)
+				if err != nil {
+					fmt.Fprintf(w, "event: error\ndata: %v\n\n", err)
+					flusher.Flush()
+					return
+				}
+			}
+
+			time.Sleep(30 * time.Second)
 		}
-	}()
+	}
 }
 
 func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
@@ -168,11 +215,9 @@ func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
 
 	isAuthorized, roomID, err := room.AuthorizeInvitationKey(requestBody.KeyInput)
 	if err != nil {
-		// should specify the error here
-		// could be internal error
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"isAuthorized": isAuthorized,
+			"isAuthorized": false,
 			"roomID":       "",
 		})
 		return
