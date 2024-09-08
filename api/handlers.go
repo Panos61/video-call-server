@@ -33,13 +33,12 @@ func createRoomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hostParticipant.Token = jwtToken
+
 	response := map[string]interface{}{
 		"id":           newRoom.ID,
 		"participants": *hostParticipant,
-		"token":        jwtToken,
 	}
-
-	fmt.Printf("Create-room resp: %v\n", response)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
