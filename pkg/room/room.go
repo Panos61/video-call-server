@@ -15,7 +15,7 @@ type Participant struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	IsHost bool   `json:"isHost"`
-	Token  string `json:jwtToken`
+	Token  string `json:"jwt"`
 }
 
 type Room struct {
