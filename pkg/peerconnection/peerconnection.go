@@ -12,6 +12,15 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
+var ConfigICEServer = webrtc.Configuration{
+	ICEServers: []webrtc.ICEServer{
+		{
+			URLs: []string{"stun:stun.l.google.com:19302"},
+		},
+	},
+	SDPSemantics: webrtc.SDPSemanticsUnifiedPlanWithFallback,
+}
+
 func InitPeerConnection(w http.ResponseWriter, r *http.Request, rm *room.Room) (*webrtc.PeerConnection, error) {
 	file, err := os.OpenFile("peerconnection.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0664)
 	if err != nil {
@@ -23,7 +32,7 @@ func InitPeerConnection(w http.ResponseWriter, r *http.Request, rm *room.Room) (
 	media.ConfigMedia()
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(&media.MediaEngine))
 
-	peerConnection, err := api.NewPeerConnection(media.ConfigICEServer)
+	peerConnection, err := api.NewPeerConnection(ConfigICEServer)
 	if err != nil {
 		return nil, err
 	}

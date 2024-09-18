@@ -1,6 +1,8 @@
 package redisclient
 
-import "github.com/go-redis/redis"
+import (
+	"github.com/redis/go-redis/v9"
+)
 
 var rdb *redis.Client
 

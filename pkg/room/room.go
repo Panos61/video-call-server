@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"server/pkg/jwtutils"
-	"server/redisclient"
+	"server/pkg/redisclient"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"

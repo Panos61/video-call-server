@@ -7,12 +7,9 @@ import (
 	"log"
 	"net/http"
 	"server/pkg/jwtutils"
-	"server/pkg/peerconnection"
 	"server/pkg/room"
 	"strings"
 	"time"
-
-	"github.com/pion/webrtc/v3"
 )
 
 func createRoomHandler(w http.ResponseWriter, r *http.Request) {
@@ -227,45 +224,4 @@ func authorizeInvitationHandler(w http.ResponseWriter, r *http.Request) {
 		"isAuthorized": isAuthorized,
 		"roomID":       roomID,
 	})
-}
-
-func signallingHandler(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "" {
-		http.Error(w, "No room with the specified id found.", http.StatusBadRequest)
-		return
-	}
-
-	existingRoom, err := room.GetRoom(id)
-	if err != nil {
-		return
-	}
-
-	peerconnection, err := peerconnection.InitPeerConnection(w, r, existingRoom)
-	if peerconnection == nil {
-		http.Error(w, "Failed to create peer connection.", http.StatusInternalServerError)
-	}
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	// existingRoom.PeerConnections[room.GenerateRoomID()] = peerconnection
-
-	response := struct {
-		RoomID          string                            `json:"id"`
-		Participants    map[string]*room.Participant      `json:"participants"`
-		PeerConnections map[string]*webrtc.PeerConnection `json:"peer_connections"`
-	}{
-		RoomID:       existingRoom.ID,
-		Participants: existingRoom.Participants,
-		// PeerConnections: existingRoom.PeerConnections,
-	}
-
-	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to encode response"})
-	}
 }
