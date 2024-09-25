@@ -6,8 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"server/pkg/jwtutils"
-	"server/pkg/room"
+	"server/internal/jwtutils"
+	"server/internal/room"
 	"strings"
 	"time"
 )

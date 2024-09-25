@@ -3,8 +3,6 @@ package signalling
 
 import (
 	"bufio"
-	"bytes"
-	"compress/gzip"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,7 +15,7 @@ import (
 )
 
 // Allows compressing offer/answer to bypass terminal input limits.
-const compress = false
+// const compress = false
 
 // MustReadStdin blocks until input is received from stdin
 func MustReadStdin() string {
@@ -67,37 +65,47 @@ func Decode(encoded string, sd *webrtc.SessionDescription) {
 	}
 }
 
-func zip(in []byte) []byte {
-	var b bytes.Buffer
-	gz := gzip.NewWriter(&b)
-	_, err := gz.Write(in)
+func DecodeMessage(data []byte) (SignalMessage, error) {
+	var message SignalMessage
+	err := json.Unmarshal(data, &message)
 	if err != nil {
-		panic(err)
+		return SignalMessage{}, err
 	}
-	err = gz.Flush()
-	if err != nil {
-		panic(err)
-	}
-	err = gz.Close()
-	if err != nil {
-		panic(err)
-	}
-	return b.Bytes()
+
+	return message, nil
 }
 
-func unzip(in []byte) []byte {
-	var b bytes.Buffer
-	_, err := b.Write(in)
-	if err != nil {
-		panic(err)
-	}
-	r, err := gzip.NewReader(&b)
-	if err != nil {
-		panic(err)
-	}
-	res, err := io.ReadAll(r)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
+// func zip(in []byte) []byte {
+// 	var b bytes.Buffer
+// 	gz := gzip.NewWriter(&b)
+// 	_, err := gz.Write(in)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	err = gz.Flush()
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	err = gz.Close()
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return b.Bytes()
+// }
+
+// func unzip(in []byte) []byte {
+// 	var b bytes.Buffer
+// 	_, err := b.Write(in)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	r, err := gzip.NewReader(&b)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	res, err := io.ReadAll(r)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	return res
+// }
