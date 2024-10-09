@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"server/pkg/jwtutils"
-	"server/redisclient"
+	"server/internal/jwtutils"
+	"server/internal/redisclient"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"

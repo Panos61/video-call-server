@@ -1,7 +1,6 @@
-package api
+package signalling
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -15,11 +14,11 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-func webSocketConnHandler(w http.ResponseWriter, r *http.Request) {
+func WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatalf("Failed to upgrade the HTTP connection to WebSocket: %v\n", err)
+		http.Error(w, "failed to upgrade HTTP to WebSocket", 500)
 	}
 
-	conn.Close()
+	defer conn.Close()
 }

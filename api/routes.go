@@ -1,6 +1,9 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+	"server/internal/signalling"
+)
 
 func InitializeRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
@@ -10,9 +13,9 @@ func InitializeRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /room-invitation/{id}", CorsMiddleware(http.HandlerFunc(setInvKeyHandler)))
 	mux.HandleFunc("GET /sse-key-update/{id}", CorsMiddleware(http.HandlerFunc(sseKeyUpdateHandler)))
 	mux.HandleFunc("/authorize-invite", CorsMiddleware(http.HandlerFunc(authorizeInvitationHandler)))
-	mux.HandleFunc("/signalling/{id}", CorsMiddleware(http.HandlerFunc(signallingHandler)))
+	// mux.HandleFunc("/signalling/{id}", CorsMiddleware(http.HandlerFunc(signallingHandler)))
 
-	mux.HandleFunc("/ws", CorsMiddleware(http.HandlerFunc(webSocketConnHandler)))
+	mux.HandleFunc("/ws", CorsMiddleware(http.HandlerFunc(signalling.WebSocketHandler)))
 
 	return mux
 }
